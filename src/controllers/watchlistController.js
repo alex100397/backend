@@ -1,108 +1,77 @@
-import { prisma } from '../config/database.js'
+import * as watchlistService from '../services/watchlistService.js';
+import { sendSuccess, sendError } from '../utils/apiResponse.js';
 
-const addToWatchlist = async (req, res) => {
+/**
+ * POST /api/v1/watchlist
+ */
+const addToWatchlist = async (req, res, next) => {
     try {
-        console.log("Raw request body:", req.body);
+        const { movieId, status, rating, notes } = req.body;
 
-        const { movieId, status, rating, notes } = req.body
+        const result = await watchlistService.addToWatchlist(req.user.id, {
+            movieId, status, rating, notes,
+        });
 
-        if (!movieId) {
-            return res.status(400).json({
-                message: "movieId is required",
-                receivedBody: req.body
-            });
+        if (result.error) {
+            return sendError(res, result.error, result.statusCode);
         }
 
-        //Verify movie exists
-        const movie = await prisma.movie.findUnique({ where: { id: movieId } })
-        if (!movie) return res.status(404).json({ message: "Movie not found" })
-
-        //Check if already added
-        const existingWatchlist = await prisma.watchListItem.findFirst({
-            where: {
-                movieId: movieId,
-                userId: req.user.id,
-            }
-        })
-        if (existingWatchlist) return res.status(400).json({ message: "Movie already added to watchlist" })
-
-        // Ensure status is valid according to the Prisma enum WatchListStatus
-        // The enum has PLANNED, WATCHING, COMPLETED, DROPPED.
-        const upperStatus = status ? status.toUpperCase() : 'PLANNED';
-
-        const watchlistItem = await prisma.watchListItem.create({
-            data: {
-                movieId,
-                userId: req.user.id,
-                status: upperStatus,
-                rating,
-                notes
-            }
-        })
-        res.status(200).json({
-            message: "Movie added to watchlist successfully",
-            data: {
-                watchlistItem
-            }
-        })
-
+        sendSuccess(res, { watchlistItem: result.data }, 'Movie added to watchlist successfully', 201);
     } catch (error) {
-        console.error("Error in addToWatchlist:", error);
-        res.status(500).json({ message: "Failed to add stock to watchlist", error: error.message });
+        next(error);
     }
-}
+};
 
-const removeFromWatchlist = async (req, res) => {
+/**
+ * DELETE /api/v1/watchlist/:id
+ */
+const removeFromWatchlist = async (req, res, next) => {
     try {
-        const { id } = req.params;
-        const watchlistItem = await prisma.watchListItem.delete({
-            where: {
-                id: id,
-            }
-        })
-        res.status(200).json({ message: "Movie removed from watchlist successfully", data: { watchlistItem } })
+        const watchlistItem = await watchlistService.removeFromWatchlist(
+            req.params.id,
+            req.user.id, // Ownership check
+        );
+        sendSuccess(res, { watchlistItem }, 'Movie removed from watchlist successfully');
     } catch (error) {
-        res.status(500).json({ message: "Failed to remove movie from watchlist", error: error.message });
+        next(error);
     }
-}
+};
 
-const updateWatchlistStatus = async (req, res) => {
+/**
+ * PUT /api/v1/watchlist/:id
+ */
+const updateWatchlistStatus = async (req, res, next) => {
     try {
-        const { id } = req.params;
         const { status, rating, notes } = req.body;
-        const watchlistItem = await prisma.watchListItem.update({
-            where: {
-                id: id,
-            },
-            data: {
-                status,
-                rating,
-                notes
-            }
-        })
-        res.status(200).json({ message: "Movie watchlist status updated successfully", data: { watchlistItem } })
+        const watchlistItem = await watchlistService.updateWatchlistItem(
+            req.params.id,
+            req.user.id, // Ownership check
+            { status, rating, notes },
+        );
+        sendSuccess(res, { watchlistItem }, 'Watchlist item updated successfully');
     } catch (error) {
-        res.status(500).json({ message: "Failed to update movie watchlist status", error: error.message });
+        next(error);
     }
-}
+};
 
-const getWatchlist = async (req, res) => {
+/**
+ * GET /api/v1/watchlist?page=1&limit=20
+ */
+const getWatchlist = async (req, res, next) => {
     try {
-        const watchlistItem = await prisma.watchListItem.findMany({
-            where: {
-                userId: req.user.id,
-            }
-        })
-        res.status(200).json({ message: "Movie watchlist fetched successfully", data: { watchlistItem } })
-    } catch (error) {
-        res.status(500).json({ message: "Failed to fetch movie watchlist", error: error.message });
-    }
-}
+        const page = parseInt(req.query.page) || 1;
+        const limit = Math.min(parseInt(req.query.limit) || 20, 100);
 
+        const result = await watchlistService.getWatchlist(req.user.id, { page, limit });
+        sendSuccess(res, result, 'Watchlist fetched successfully');
+    } catch (error) {
+        next(error);
+    }
+};
 
 export {
     addToWatchlist,
     removeFromWatchlist,
     updateWatchlistStatus,
-    getWatchlist
-}
+    getWatchlist,
+};

@@ -1,27 +1,24 @@
 import express from 'express';
+import {
+    getMovies,
+    getMovie,
+    createMovie,
+    updateMovie,
+    deleteMovie,
+} from '../controllers/movieController.js';
+import { authMiddleware } from '../middlewares/authMiddleware.js';
+import { validateRequest, validateParams } from '../middlewares/validateRequest.js';
+import { createMovieSchema, updateMovieSchema, movieIdParamSchema } from '../validators/movieValidator.js';
 
 const router = express.Router();
 
-//GET, POST, PUT, DELETE
+// Public routes
+router.get('/', getMovies);
+router.get('/:id', validateParams(movieIdParamSchema), getMovie);
 
-router.get('/', (req, res) => {
-    res.json({'message': 'Getting all movies'});
-});
-
-router.post('/', (req, res) => {
-    res.json({'message': 'Creating a movie'});
-});
-
-router.get('/:id', (req, res) => {
-    res.json({'message': `Getting a movie with id ${req.params.id}`});
-});
-
-router.put('/:id', (req, res) => {
-    res.json({'message': `Updating a movie with id ${req.params.id}`});
-});
-
-router.delete('/:id', (req, res) => {
-    res.json({'message': `Deleting a movie with id ${req.params.id}`});
-});
+// Protected routes (must be logged in)
+router.post('/', authMiddleware, validateRequest(createMovieSchema), createMovie);
+router.put('/:id', authMiddleware, validateParams(movieIdParamSchema), validateRequest(updateMovieSchema), updateMovie);
+router.delete('/:id', authMiddleware, validateParams(movieIdParamSchema), deleteMovie);
 
 export default router;

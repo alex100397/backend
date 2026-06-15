@@ -45,7 +45,7 @@ model WatchListItem {
   userId    String
   movieId   String
   createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   notes    String?
   rating   Int?
   status   WatchListStatus @default(PLANNED)

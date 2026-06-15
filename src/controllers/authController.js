@@ -1,102 +1,75 @@
-import { prisma } from "../config/database.js";
-import bcrypt from "bcryptjs";
-import generateToken from "../utils/generateToken.js";
-const signup = async (req, res) => {
-    const { name, email, password } = req.body;
-    if (!name || !email || !password) {
-        return res.status(400).json({ 'message': 'All fields are required' });
-    }
-    const userExists = await prisma.user.findUnique({ where: { email } });
-    if (userExists) {
-        return res
-            .status(400)
-            .json({ 'message': 'User already exists' });
-    }
+import * as authService from '../services/authService.js';
+import generateToken from '../utils/generateToken.js';
+import { sendSuccess, sendError } from '../utils/apiResponse.js';
 
-    //Hash password
+const signup = async (req, res, next) => {
+    try {
+        const { name, email, password } = req.body;
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    //Create user
-    const user = await prisma.user.create({
-        data: {
-            name,
-            email,
-            password: hashedPassword
+        // Check if user already exists
+        const userExists = await authService.findUserByEmail(email);
+        if (userExists) {
+            return sendError(res, 'User already exists', 400);
         }
-    });
 
-    const token = generateToken(user.id, res);
+        // Create user (password is hashed inside the service)
+        const user = await authService.createUser({ name, email, password });
 
+        // Generate JWT and set cookie
+        const token = generateToken(user.id, res);
 
-    res
-        .status(201)
-        .json({
-            message: 'User created successfully',
-            status: "Success",
-            data: {
-                user: {
-                    name: name,
-                    email: email,
-                    id: user.id
-                },
-                token
-            }
-        });
-}
-
-const login = async (req, res) => {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-        return res.status(400).json({ 'message': 'All fields are required' });
+        sendSuccess(res, {
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+            },
+            token,
+        }, 'User created successfully', 201);
+    } catch (error) {
+        next(error);
     }
+};
 
-    //Check user email exists
-    const userExists = await prisma.user.findUnique({ where: { email } });
-    if (!userExists) {
-        return res
-            .status(400)
-            .json({ 'message': 'User does not exist' });
+const login = async (req, res, next) => {
+    try {
+        const { email, password } = req.body;
+
+        // Check if user exists
+        const user = await authService.findUserByEmail(email);
+        if (!user) {
+            // Generic message to prevent user enumeration
+            return sendError(res, 'Invalid email or password', 401);
+        }
+
+        // Verify password
+        const isPasswordValid = await authService.verifyPassword(password, user.password);
+        if (!isPasswordValid) {
+            return sendError(res, 'Invalid email or password', 401);
+        }
+
+        // Generate JWT and set cookie
+        const token = generateToken(user.id, res);
+
+        sendSuccess(res, {
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+            },
+            token,
+        }, 'User logged in successfully');
+    } catch (error) {
+        next(error);
     }
-
-    const isPasswordValid = await bcrypt.compare(password, userExists.password);
-    if (!isPasswordValid) {
-        return res
-            .status(400)
-            .json({ 'message': 'Invalid password' });
-    }
-
-    //Generate JWT Token
-    const token = generateToken(userExists.id, res);
-
-    res
-        .status(200)
-        .json({
-            message: 'User logged in successfully',
-            status: "Success",
-            data: {
-                user: {
-                    email: userExists.email,
-                    id: userExists.id
-                },
-                token
-            }
-        });
-}
+};
 
 const logout = async (req, res) => {
-    // res.clearCookie('jwt');
     res.cookie('jwt', '', {
         httpOnly: true,
-        expires: new Date(0)
+        expires: new Date(0),
     });
-    res
-        .status(200)
-        .json({
-            message: 'User logged out successfully',
-            status: "Success",
-        });
-}
+    sendSuccess(res, null, 'User logged out successfully');
+};
+
 export { signup, login, logout };
