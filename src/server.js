@@ -11,6 +11,8 @@ import errorHandler from './middlewares/errorHandler.js';
 import movieRoutes from './routes/movieRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import watchlistRoutes from './routes/watchlistRoutes.js';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger.js';
 
 export const createApp = async () => {
     // Validate environment variables before anything else
@@ -47,6 +49,9 @@ export const createApp = async () => {
             uptime: process.uptime(),
         });
     });
+
+    // ── Swagger API Documentation ────────────────────────────
+    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
     // ── API ROUTES (versioned) ───────────────────────────────
     app.use('/api/v1/auth', authRoutes);
